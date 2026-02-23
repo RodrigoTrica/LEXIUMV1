@@ -1,23 +1,88 @@
-# Dependencias
-node_modules/
+# ==========================================
+# APPBOGADO — .gitignore OFICIAL
+# ==========================================
 
-# Builds
+# =========================
+# Node
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json.bak
+
+# =========================
+# Electron Build Artifacts
+# =========================
 dist/
 build/
+out/
+release/
+win-unpacked/
+*.exe
+*.blockmap
+latest.yml
+builder-debug.yml
+builder-effective-config.yaml
 
-# Variables de entorno
-.env
-.env.local
-
-# Datos locales sensibles
+# =========================
+# Runtime Data (MUY IMPORTANTE)
+# =========================
 datos/
-documentos/
+*.enc
+.secret
+
+# Backups locales
 backup/
+*.json.bak
 
+# =========================
 # Logs
+# =========================
 *.log
+logs/
+*.tmp
 
-# Sistema
+# =========================
+# OS Files
+# =========================
 .DS_Store
 Thumbs.db
-DESCARGAR_RECURSOS.bat
+desktop.ini
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.local
+.env.development
+.env.production
+
+# =========================
+# IDE / Editor
+# =========================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# =========================
+# Coverage / Testing
+# =========================
+coverage/
+.nyc_output/
+
+# =========================
+# Temporary / Cache
+# =========================
+*.cache
+.cache/
+.tmp/
+temp/
+
+# =========================
+# Electron Secrets (futuro)
+# =========================
+*.key
+*.pem
+*.p12
