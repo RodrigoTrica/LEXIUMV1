@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="assets/fonts/fonts.css">
     <link rel="stylesheet" href="assets/fa/css/all.min.css">
     <link rel="stylesheet" href="css/styles.css">
-    <link rel="stylesheet" href="css/improvements.css">	
+    <link rel="stylesheet" href="css/rediseno.css">	
 
 </head>
 
@@ -29,7 +29,7 @@
         </div>
         <!-- Usuario activo -->
         <div class="sidebar-user" id="sidebar-user-info">
-            <div class="sidebar-user-avatar" id="su-avatar" style="background:#1a3a6b;">A</div>
+            <div class="sidebar-user-avatar" id="su-avatar">A</div>
             <div class="sidebar-user-info">
                 <div class="sidebar-user-name" id="su-nombre">Administrador</div>
                 <div class="sidebar-user-role" id="su-rol">Admin</div>
@@ -87,25 +87,23 @@
 
             <div class="nav-divider"></div>
             <button onclick="importarBackup()" class="nav-bottom-btn"><i class="fas fa-upload"></i> Importar Backup</button>
-            <button onclick="BackupDisco.hacerAhora('manual')" class="nav-bottom-btn" style="background:linear-gradient(135deg,#1a3a5c,#2d5986);color:#fff;border:1px solid #2d5986;" title="Guardar backup ahora">
+            <button onclick="BackupDisco.hacerAhora('manual')" class="nav-bottom-btn nav-bottom-btn--highlight" title="Guardar backup ahora">
                 <i class="fas fa-download"></i> Backup ahora
             </button>
-            <button onclick="BackupDisco.elegirCarpeta()" class="nav-bottom-btn" style="font-size:11px;opacity:0.8;" title="Elegir carpeta donde se guardan los backups">
+            <button onclick="BackupDisco.elegirCarpeta()" class="nav-bottom-btn nav-bottom-btn--small" title="Elegir carpeta donde se guardan los backups">
                 <i class="fas fa-folder-open"></i> Elegir carpeta backup
             </button>
-            <div id="backup-disco-estado" style="font-size:10px;text-align:center;padding:2px 8px 6px;opacity:0.8;">Cargando...</div>
+            <div id="backup-disco-estado" class="sb-status">Cargando...</div>
             <div class="nav-divider"></div>
             <button onclick="DocFisico.elegirCarpeta()" class="nav-bottom-btn"
-                style="font-size:12px;"
                 title="Establece la carpeta raiz donde se organizan documentos, backups y exportaciones">
                 <i class="fas fa-folder"></i> Carpeta de la app
             </button>
-            <button onclick="DocFisico.sincronizarTodo()" class="nav-bottom-btn"
-                style="font-size:11px;opacity:0.8;"
+            <button onclick="DocFisico.sincronizarTodo()" class="nav-bottom-btn nav-bottom-btn--small"
                 title="Copia todos los adjuntos existentes a la carpeta de documentos">
                 <i class="fas fa-sync"></i> Sincronizar docs a disco
             </button>
-            <div id="docfisico-estado" style="font-size:10px;text-align:center;padding:2px 8px 6px;opacity:0.8;">Sin carpeta de docs</div>
+            <div id="docfisico-estado" class="sb-status">Sin carpeta de docs</div>
             <button onclick="logout()" class="nav-bottom-btn nav-logout-btn"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
         </nav>
     </aside>
@@ -197,13 +195,7 @@
                     <input type="text" class="topbar-search-input" placeholder="Buscar causas, clientes, documento..." id="topbar-search-input" oninput="if(typeof busquedaGlobal==='function')tab('busqueda',null)">
                 </div>
                 <div class="topbar-spacer"></div>
-                <button id="btn-guardar-global" onclick="guardarCambiosGlobal()" title="Guardar cambios" style="
-                    display:flex; align-items:center; gap:6px;
-                    background:var(--primary,#1a3a6b); color:#fff;
-                    border:none; border-radius:8px; padding:7px 14px;
-                    font-size:0.82rem; font-weight:600; cursor:pointer;
-                    transition:opacity 0.2s, transform 0.1s;
-                    box-shadow:0 2px 6px rgba(26,58,107,0.25);">
+                <button id="btn-guardar-global" onclick="guardarCambiosGlobal()" title="Guardar cambios">
                     <i class="fas fa-save"></i> <span>Guardar</span>
                 </button>
                 <span id="storage-usage-badge" class="topbar-storage-badge" title="Uso de almacenamiento local">
@@ -220,7 +212,7 @@
                     <div class="topbar-avatar" id="topbar-avatar">A</div>
                     <div class="topbar-info">
                         <div class="topbar-name" id="topbar-name">Administrador</div>
-                        <div class="topbar-email" id="topbar-email">admin@appbogado.com</div>
+                        <div class="topbar-email" id="topbar-email"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="7f1e1b1216113f1e0f0f1d10181e1b10511c1012">[email&#160;protected]</a></div>
                     </div>
                 </div>
             </div>
@@ -2218,7 +2210,7 @@
          Orden de carga: dependencias primero, app core al final
     ════════════════════════════════════════════════════ -->
     <!-- v13: EventBus + RenderBus + StorageGuard (debe ir PRIMERO) -->
-    <script src="js/00-disk-storage.js"></script>
+    <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="js/00-disk-storage.js"></script>
     <script src="js/00b-config.js"></script>
     <script src="js/00-eventbus.js"></script>
     <script src="js/01-db-auth.js"></script>
@@ -2748,15 +2740,4 @@
                     window.addEventListener('resize', resize);
                 }
                 tick();
-            }
-
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', start);
-            } else {
-                start();
-            }
-        })();
-    </script>
-
-</body>
-</html>
+            
