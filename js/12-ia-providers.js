@@ -21,6 +21,14 @@
 //   - Inspección accidental de localStorage en otro contexto
 // ═══════════════════════════════════════════════════════════════════
 
+// Helper de escape HTML para uso interno (protección XSS en mensajes de error)
+function _iaEscHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 const _IACrypto = (() => {
     // Secreto base mezclado con fingerprint del navegador.
     // Cambiar este valor invalida todas las keys guardadas (migración limpia).
@@ -163,11 +171,11 @@ const IA_PROVIDERS = {
         keyUrl: 'https://console.anthropic.com/settings/keys',
         keyPrefix: 'sk-ant-',
         models: [
-            { id: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', badge: 'RECOMENDADO', badgeColor: '#15803d', desc: 'El más equilibrado: inteligente, rápido y económico.' },
-            { id: 'claude-opus-4-20250514', label: 'Claude Opus 4', badge: 'MÁS POTENTE', badgeColor: '#6d28d9', desc: 'Máxima capacidad de razonamiento de Anthropic.' },
+            { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', badge: 'RECOMENDADO', badgeColor: '#15803d', desc: 'El más equilibrado: inteligente, rápido y económico.' },
+            { id: 'claude-opus-4-6', label: 'Claude Opus 4.6', badge: 'MÁS POTENTE', badgeColor: '#6d28d9', desc: 'Máxima capacidad de razonamiento de Anthropic.' },
             { id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', badge: 'ULTRA RÁPIDO', badgeColor: '#0369a1', desc: 'El más veloz y económico de la familia Claude.' },
         ],
-        defaultModel: 'claude-sonnet-4-20250514',
+        defaultModel: 'claude-sonnet-4-6',
     },
 };
 
@@ -682,7 +690,7 @@ async function _iaTestKeyUI(pid) {
         } else if (es401) {
             st.innerHTML = `<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> <strong>API Key inválida (401).</strong> Verifique que la key sea correcta y esté activa.</span>`;
         } else {
-            st.innerHTML = `<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> Error: ${msg}</span>`;
+            st.innerHTML = `<span style="color:var(--danger);"><i class="fas fa-times-circle"></i> Error: ${_iaEscHtml(msg)}</span>`;
         }
     }
 }
