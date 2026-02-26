@@ -15,10 +15,14 @@
  */
 
 const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron');
-const path   = require('path');
-const fs     = require('fs');
-const os     = require('os');
+const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
+
+const alertService = require('./alert-service-v3');
+const waLogger = require('./wa-logger-v3');
+const whatsappService = require('./whatsapp-service-v3');
 
 const IS_DEV = !app.isPackaged;
 
@@ -32,7 +36,7 @@ try {
     [DATA_DIR, DOCS_DIR].forEach(d => {
         if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
     });
-} catch(e) {
+} catch (e) {
     // Si no se puede crear la carpeta de datos, la app no puede funcionar
     dialog.showErrorBox('Error crítico', `No se pudo crear la carpeta de datos:\n${e.message}`);
     app.quit();
@@ -66,27 +70,27 @@ function derivarClave() {
 
 function cifrar(texto) {
     if (typeof texto !== 'string') throw new Error('cifrar: se esperaba string');
-    const clave  = derivarClave();
-    const iv     = crypto.randomBytes(12);
+    const clave = derivarClave();
+    const iv = crypto.randomBytes(12);
     const cipher = crypto.createCipheriv('aes-256-gcm', clave, iv);
-    const enc    = Buffer.concat([cipher.update(texto, 'utf8'), cipher.final()]);
-    const tag    = cipher.getAuthTag();
+    const enc = Buffer.concat([cipher.update(texto, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
     return Buffer.concat([iv, tag, enc]).toString('base64');
 }
 
 function descifrar(b64) {
     try {
         if (typeof b64 !== 'string') return null;
-        const clave    = derivarClave();
-        const buf      = Buffer.from(b64, 'base64');
+        const clave = derivarClave();
+        const buf = Buffer.from(b64, 'base64');
         if (buf.length < 29) return null; // mínimo iv(12)+tag(16)+1 byte
-        const iv       = buf.subarray(0, 12);
-        const tag      = buf.subarray(12, 28);
-        const datos    = buf.subarray(28);
+        const iv = buf.subarray(0, 12);
+        const tag = buf.subarray(12, 28);
+        const datos = buf.subarray(28);
         const decipher = crypto.createDecipheriv('aes-256-gcm', clave, iv);
         decipher.setAuthTag(tag);
         return Buffer.concat([decipher.update(datos), decipher.final()]).toString('utf8');
-    } catch(e) {
+    } catch (e) {
         console.error('[Crypto] Error al descifrar:', e.message);
         return null;
     }
@@ -110,7 +114,7 @@ ipcMain.handle('storage:get', (_e, clave) => {
         const archivo = path.join(DATA_DIR, `${sanitizarNombre(clave)}.enc`);
         if (!fs.existsSync(archivo)) return null;
         return descifrar(fs.readFileSync(archivo, 'utf8'));
-    } catch(e) {
+    } catch (e) {
         console.error('[Storage:get]', e.message);
         return null;
     }
@@ -123,7 +127,7 @@ ipcMain.handle('storage:set', (_e, clave, valor) => {
         const archivo = path.join(DATA_DIR, `${sanitizarNombre(clave)}.enc`);
         fs.writeFileSync(archivo, cifrar(valor), 'utf8');
         return { ok: true };
-    } catch(e) {
+    } catch (e) {
         console.error('[Storage:set]', e.message);
         return { error: e.message };
     }
@@ -135,7 +139,7 @@ ipcMain.handle('storage:delete', (_e, clave) => {
         const archivo = path.join(DATA_DIR, `${sanitizarNombre(clave)}.enc`);
         if (fs.existsSync(archivo)) fs.unlinkSync(archivo);
         return { ok: true };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
@@ -145,7 +149,7 @@ ipcMain.handle('storage:list', (_e) => {
         return fs.readdirSync(DATA_DIR)
             .filter(f => f.endsWith('.enc') && !f.includes('..'))
             .map(f => f.replace('.enc', ''));
-    } catch(e) { return []; }
+    } catch (e) { return []; }
 });
 
 // ── IPC Handlers — Documentos ─────────────────────────────────────────────────
@@ -161,7 +165,7 @@ ipcMain.handle('docs:guardar', (_e, nombre, base64Data, mimeType) => {
         const cifrado = cifrar(JSON.stringify({ nombre, mimeType, data: base64Data }));
         fs.writeFileSync(path.join(DOCS_DIR, nombreSeguro + '.enc'), cifrado, 'utf8');
         return { ok: true, id: nombreSeguro };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
@@ -176,7 +180,7 @@ ipcMain.handle('docs:leer', (_e, id) => {
         const descifrado = descifrar(fs.readFileSync(ruta, 'utf8'));
         if (!descifrado) return { error: 'Error al descifrar' };
         return { ok: true, ...JSON.parse(descifrado) };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
@@ -189,7 +193,7 @@ ipcMain.handle('docs:eliminar', (_e, id) => {
         const ruta = path.join(DOCS_DIR, sanitizarNombre(id) + '.enc');
         if (fs.existsSync(ruta)) fs.unlinkSync(ruta);
         return { ok: true };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
@@ -199,7 +203,7 @@ ipcMain.handle('docs:listar', (_e) => {
         return fs.readdirSync(DOCS_DIR)
             .filter(f => f.endsWith('.enc') && !f.includes('..'))
             .map(f => f.replace('.enc', ''));
-    } catch(e) { return []; }
+    } catch (e) { return []; }
 });
 
 // ── IPC Handlers — Backup ─────────────────────────────────────────────────────
@@ -214,7 +218,7 @@ ipcMain.handle('backup:exportar', async (_e, jsonData) => {
     try {
         fs.writeFileSync(filePath, jsonData, 'utf8');
         return { ok: true, ruta: filePath };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
@@ -231,24 +235,80 @@ ipcMain.handle('backup:importar', async (_e) => {
         const stat = fs.statSync(filePaths[0]);
         if (stat.size > 100 * 1024 * 1024) return { error: 'Archivo demasiado grande' };
         return { ok: true, data: fs.readFileSync(filePaths[0], 'utf8') };
-    } catch(e) {
+    } catch (e) {
         return { error: e.message };
     }
 });
 
 // ── IPC Handlers — Sistema ────────────────────────────────────────────────────
 ipcMain.handle('sistema:info', () => ({
-    dataDir:  DATA_DIR,
-    docsDir:  DOCS_DIR,
+    dataDir: DATA_DIR,
+    docsDir: DOCS_DIR,
     hostname: os.hostname(),
     platform: os.platform(),
-    version:  app.getVersion(),
-    isDev:    IS_DEV
+    version: app.getVersion(),
+    isDev: IS_DEV
 }));
 
 ipcMain.handle('sistema:abrirCarpetaDatos', () => {
     shell.openPath(DATA_DIR);
     return { ok: true };
+});
+
+ipcMain.handle('whatsapp:guardar-config', async (_e, config) => {
+    const { validarNumero } = require('./whatsapp-service-v3');
+
+    if (config.numeroDestino) {
+        const v = validarNumero(config.numeroDestino);
+        if (!v.ok) {
+            return { error: `Número inválido: ${v.error}` };
+        }
+        config.numeroDestino = v.numero;
+    }
+
+    try {
+        const ruta = path.join(DATA_DIR, 'wa_config.enc');
+        fs.writeFileSync(ruta, cifrar(JSON.stringify(config)), 'utf8');
+        return { ok: true };
+    } catch (e) {
+        return { error: e.message };
+    }
+});
+
+// ── IPC Handler — Reset WhatsApp ─────────────────────────────────────────────
+ipcMain.handle('whatsapp:reset', async () => {
+    const resultados = [];
+    const archivos = ['wa_config.enc', 'wa_logs.enc'];
+
+    // Borrar archivos de config y logs
+    archivos.forEach(nombre => {
+        const ruta = path.join(DATA_DIR, nombre);
+        try {
+            if (fs.existsSync(ruta)) {
+                fs.unlinkSync(ruta);
+                resultados.push({ archivo: nombre, ok: true });
+            } else {
+                resultados.push({ archivo: nombre, ok: true, nota: 'no existía' });
+            }
+        } catch(e) {
+            resultados.push({ archivo: nombre, ok: false, error: e.message });
+        }
+    });
+
+    // Borrar carpeta de sesión WhatsApp
+    const waSession = path.join(app.getPath('userData'), '.wa-session');
+    try {
+        if (fs.existsSync(waSession)) {
+            fs.rmSync(waSession, { recursive: true, force: true });
+            resultados.push({ archivo: '.wa-session', ok: true });
+        } else {
+            resultados.push({ archivo: '.wa-session', ok: true, nota: 'no existía' });
+        }
+    } catch(e) {
+        resultados.push({ archivo: '.wa-session', ok: false, error: e.message });
+    }
+
+    return { ok: true, resultados };
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -257,6 +317,24 @@ function sanitizarNombre(nombre) {
 }
 function fechaHoy() {
     return new Date().toISOString().split('T')[0];
+}
+
+function getWhatsAppConfig() {
+    try {
+        const ruta = path.join(DATA_DIR, 'wa_config.enc');
+        if (!fs.existsSync(ruta)) {
+            return {
+                numeroDestino: '',
+                nombreAbogado: '',
+                timezone: 'America/Santiago',
+                activo: false
+            };
+        }
+        const raw = descifrar(fs.readFileSync(ruta, 'utf8'));
+        return raw ? JSON.parse(raw) : {};
+    } catch (e) {
+        return {};
+    }
 }
 
 // ── Ventana principal ─────────────────────────────────────────────────────────
@@ -268,11 +346,11 @@ function crearVentana() {
         height: 700,
         icon: path.join(__dirname, 'assets/icon.ico'),
         webPreferences: {
-            preload:          path.join(__dirname, 'preload.js'),
+            preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,   // ✅ renderer aislado
-            nodeIntegration:  false,  // ✅ sin acceso a Node en renderer
-            sandbox:          true,   // ✅ sandbox de Chromium activado
-            webSecurity:      true,   // ✅ Same-origin policy
+            nodeIntegration: false,  // ✅ sin acceso a Node en renderer
+            sandbox: true,   // ✅ sandbox de Chromium activado
+            webSecurity: true,   // ✅ Same-origin policy
             allowRunningInsecureContent: false,
         },
         show: false
@@ -338,6 +416,31 @@ app.whenReady().then(() => {
     });
 
     crearVentana();
+
+    // ── Inicializar servicios con inyección de dependencias ─────
+    alertService.init({ DATA_DIR, descifrar, cifrar });
+    waLogger.init({ DATA_DIR, cifrar, descifrar });
+    whatsappService.registrarHandlers(getWhatsAppConfig);
+
+    ipcMain.handle('whatsapp:conectar', async () => {
+        try {
+            whatsappService.initWhatsApp(mainWindow);
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+    });
+
+
+    // ── Activar si está configurado ────────────────────────────
+    const waConfig = getWhatsAppConfig();
+
+    if (waConfig.activo && waConfig.numeroDestino) {
+        mainWindow.once('ready-to-show', () => {
+            whatsappService.initWhatsApp(mainWindow);
+            whatsappService.iniciarSchedulers(waConfig);
+        });
+    }
 });
 
 app.on('window-all-closed', () => {

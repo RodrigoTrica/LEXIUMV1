@@ -34,6 +34,7 @@
                 backup_carpeta:  'APPBOGADO_BACKUP_DIR_HANDLE',
                 backup_ultimo:   'APPBOGADO_LAST_BACKUP_DISCO',
                 docfisico_raiz:  'APPBOGADO_ROOT_DIR_HANDLE_NAME',
+                tema:            'APPBOGADO_THEME',
                 gemini_key_old:  'APPBOGADO_GEMINI_KEY',
                 gemini_model_old:'APPBOGADO_GEMINI_MODEL',
             };
@@ -53,6 +54,7 @@
                 backup_ultimo:   null,
                 docfisico_raiz:  null,
                 backup_history:  [],
+                tema:            'light',
                 _version:        1,
                 _migrado:        false,
             };

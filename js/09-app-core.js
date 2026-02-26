@@ -199,7 +199,19 @@ function _updateThemeIcon(theme) {
 }
 
 async function init() {
-    // Inicializar tema — leer desde AppConfig si está disponible
+    // Esperar a que DiskStorage cargue desde disco antes de leer config
+    await new Promise(resolve => {
+        if (window.DiskStorage && window.DiskStorage.cuandoListo) {
+            window.DiskStorage.cuandoListo(resolve);
+        } else {
+            resolve();
+        }
+    });
+
+    // Forzar recarga de AppConfig desde disco ya inicializado
+    if (typeof AppConfig !== 'undefined') AppConfig.recargar();
+
+    // Leer tema con disco ya cargado
     const savedTheme = (typeof AppConfig !== 'undefined' && AppConfig.get('tema'))
         || _lsGet('APPBOGADO_THEME')
         || 'light';
@@ -222,10 +234,30 @@ async function init() {
     iaRenderModelList();
 
     setTimeout(() => {
-        notificarPlazosCriticos();
-        renderDashboardPanel();
-        renderSemaforoPlazos();
+        // Garantizar que #panel está activo antes de renderizar donnuts
+        const panelEl = document.getElementById('panel');
+        if (panelEl && !panelEl.classList.contains('active')) {
+            document.querySelectorAll('.tabs.active').forEach(s => s.classList.remove('active'));
+            panelEl.classList.add('active');
+        }
+
+        // Cada llamada protegida individualmente — un error no rompe las demás
+        try { notificarPlazosCriticos(); } catch(e) { console.warn('[init] notificarPlazosCriticos:', e.message); }
+        try { renderDashboardPanel(); } catch(e) { console.warn('[init] renderDashboardPanel:', e.message); }
+        try { if (typeof renderSemaforoPlazos === 'function') renderSemaforoPlazos(); } catch(e) { console.warn('[init] renderSemaforoPlazos:', e.message); }
+        try { if (typeof renderPanelEjecutivo === 'function') renderPanelEjecutivo(); } catch(e) { console.warn('[init] renderPanelEjecutivo:', e.message); }
+
+        // Aplicar tema después del render
+        const themeActual = document.documentElement.getAttribute('data-theme') || 'light';
+        _applyDashboardTheme(themeActual);
+
         AutoBackup.iniciar();
+
+        // Re-render donnuts con delay extra para garantizar visibilidad
+        setTimeout(() => {
+            try { renderDashboardPanel(); } catch(e) {}
+        }, 300);
+
     }, 200);
 }
 
@@ -378,6 +410,7 @@ function tab(id, btn) {
     if (id === 'tramites') { if (typeof tramitesRender === 'function') tramitesRender(); }
     if (id === 'doctrina') { if (typeof doctrinaRender === 'function') doctrinaRender(); }
     if (id === 'prescripcion') renderPrescripcion();
+    if (id === 'panel') { renderDashboardPanel(); }
     if (id === 'escritos') { gaSelectCausa(); }
     if (id === 'historial-escritos') { if (typeof historialRenderEscritos === 'function') historialRenderEscritos(); }
     if (id === 'plantillas-escritos') { if (typeof plantillasRender === 'function') plantillasRender(); }

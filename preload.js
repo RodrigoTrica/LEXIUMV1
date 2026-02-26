@@ -74,8 +74,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // ── Sistema ───────────────────────────────────────────────────────────────
     sistema: {
-        info:              () => ipcRenderer.invoke('sistema:info'),
+        info: () => ipcRenderer.invoke('sistema:info'),
         abrirCarpetaDatos: () => ipcRenderer.invoke('sistema:abrirCarpetaDatos'),
+    },
+
+    whatsapp: {
+        estado: () => ipcRenderer.invoke('whatsapp:estado'),
+        conectar: () => ipcRenderer.invoke('whatsapp:conectar'),
+        enviarResumen: () => ipcRenderer.invoke('whatsapp:enviar-resumen'),
+        enviarAlerta: (msg) => {
+            if (typeof msg !== 'string' || !msg.trim())
+                throw new Error('Mensaje vacío');
+            return ipcRenderer.invoke('whatsapp:enviar-alerta', msg);
+        },
+        guardarConfig: (cfg) => ipcRenderer.invoke('whatsapp:guardar-config', cfg),
+        desconectar: () => ipcRenderer.invoke('whatsapp:desconectar'),
+        getLogs: (n) => ipcRenderer.invoke('whatsapp:logs', n),
+        getEstadisticas: () => ipcRenderer.invoke('whatsapp:estadisticas'),
+        limpiarLogs: () => ipcRenderer.invoke('whatsapp:limpiar-logs'),
+        reset: () => ipcRenderer.invoke('whatsapp:reset'),
+        onEvento: (callback) => {
+            [
+                'whatsapp:qr',
+                'whatsapp:ready',
+                'whatsapp:disconnected',
+                'whatsapp:auth_failure',
+                'whatsapp:alerta-enviada'
+            ].forEach(ev =>
+                ipcRenderer.on(ev, (_e, data) =>
+                    callback(ev.replace('whatsapp:', ''), data)
+                )
+            );
+        }
     },
 
     // ── Indicador: corremos en Electron ───────────────────────────────────────

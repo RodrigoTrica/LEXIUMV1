@@ -86,3 +86,29 @@ temp/
 *.key
 *.pem
 *.p12
+
+# =========================
+# WhatsApp Client Data
+# =========================
+.wwebjs_cache/
+.wa-session/
+# =========================
+# SQLite (Futuro)
+# =========================
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# =========================
+# Puppeteer / Chromium
+# =========================
+.puppeteer/
+.chromium/
+
+# =========================
+# Profiling
+# =========================
+*.cpuprofile
+*.heapdump

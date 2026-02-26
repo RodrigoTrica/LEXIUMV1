@@ -1,0 +1,326 @@
+/**
+ * LEXIUM – whatsapp-service-v3.js  (Corrección #4 + verificación Electron #5)
+ * ─────────────────────────────────────────────────────────────
+ * Mejoras sobre v2:
+ *   ✅ _ejecutarCriticos() usa una sola lectura (getResumenParaWhatsApp)
+ *   ✅ Verificación de configuración segura de BrowserWindow al arrancar
+ *   ✅ Referencias actualizadas a alert-service-v3 y wa-logger-v3
+ */
+
+'use strict';
+
+const { ipcMain } = require('electron');
+const cron         = require('node-cron');
+const alertService = require('./alert-service-v3');
+const waLogger     = require('./wa-logger-v3');
+
+let Client, LocalAuth, qrcode;
+try {
+    ({ Client, LocalAuth } = require('whatsapp-web.js'));
+    qrcode = require('qrcode');
+} catch(e) {
+    console.warn('[WhatsApp] Instalar: npm install whatsapp-web.js qrcode node-cron');
+}
+
+let waClient = null;
+let waReady  = false;
+let mainWin  = null;
+
+// ── Verificación de seguridad de Electron (#5) ─────────────────
+/**
+ * Verifica que BrowserWindow tenga configuración segura.
+ * Lanza advertencia si detecta configuración débil.
+ * LEXIUM ya tiene todo correcto, pero esta función actúa como guardia.
+ */
+function verificarSeguridadElectron(win) {
+    const prefs = win.webContents.getLastWebPreferences?.() || {};
+
+    const problemas = [];
+
+    if (prefs.nodeIntegration === true) {
+        problemas.push('⚠️  nodeIntegration: true — riesgo alto');
+    }
+    if (prefs.contextIsolation === false) {
+        problemas.push('⚠️  contextIsolation: false — riesgo alto');
+    }
+    if (prefs.enableRemoteModule === true) {
+        problemas.push('⚠️  enableRemoteModule: true — deprecado y peligroso');
+    }
+    if (prefs.sandbox === false) {
+        problemas.push('⚠️  sandbox: false — reduce protección de Chromium');
+    }
+    if (prefs.webSecurity === false) {
+        problemas.push('⚠️  webSecurity: false — deshabilita same-origin policy');
+    }
+
+    if (problemas.length > 0) {
+        waLogger.logError('electron-config-insegura', { problemas });
+        console.error('[LEXIUM] 🔴 CONFIGURACIÓN ELECTRON INSEGURA:');
+        problemas.forEach(p => console.error('  ' + p));
+        console.error('[LEXIUM] Revisar webPreferences en crearVentana()');
+    } else {
+        waLogger.logOk('electron-config-verificada', {
+            nodeIntegration:  prefs.nodeIntegration  ?? false,
+            contextIsolation: prefs.contextIsolation ?? true,
+            sandbox:          prefs.sandbox          ?? true
+        });
+        console.log('[LEXIUM] ✅ Configuración Electron verificada y segura.');
+    }
+
+    return problemas.length === 0;
+}
+
+// ── Validación (#4 heredado de v2) ────────────────────────────
+function validarNumero(numero) {
+    if (typeof numero !== 'string') return { ok: false, error: 'Número debe ser string' };
+    const limpio = numero.replace(/[\s\+\-\(\)]/g, '');
+    if (!/^\d+$/.test(limpio))          return { ok: false, error: 'Solo dígitos' };
+    if (limpio.length < 10 || limpio.length > 15)
+                                         return { ok: false, error: 'Longitud inválida (10–15 dígitos con código de país)' };
+    if (/^(\d)\1+$/.test(limpio))       return { ok: false, error: 'Número inválido' };
+    return { ok: true, numero: limpio };
+}
+
+function validarMensaje(mensaje) {
+    if (typeof mensaje !== 'string' || mensaje.trim().length === 0)
+        return { ok: false, error: 'Mensaje vacío' };
+    if (mensaje.length > 4096)
+        return { ok: false, error: 'Mensaje excede límite de WhatsApp (4096 chars)' };
+    return { ok: true };
+}
+
+// ── Inicializar ────────────────────────────────────────────────
+function initWhatsApp(browserWindow) {
+    if (!Client) return;
+    mainWin = browserWindow;
+
+    // Verificar seguridad Electron (#5)
+    verificarSeguridadElectron(browserWindow);
+
+    waClient = new Client({
+        authStrategy: new LocalAuth({
+            dataPath: require('path').join(
+                require('electron').app.getPath('userData'),
+                '.wa-session'
+            )
+        }),
+        puppeteer: {
+            headless: true,
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+        }
+    });
+
+    waClient.on('qr', async (qrString) => {
+        waLogger.logInfo('qr-generado', {});
+        try {
+            const dataUrl = qrcode
+                ? await qrcode.toDataURL(qrString, { errorCorrectionLevel: 'M', width: 256, margin: 2 })
+                : null;
+            mainWin?.webContents.send('whatsapp:qr', { dataUrl });
+        } catch(e) {
+            mainWin?.webContents.send('whatsapp:qr', { dataUrl: null });
+        }
+    });
+
+    waClient.on('ready', () => {
+        waReady = true;
+        waLogger.logOk('cliente-listo', {});
+        mainWin?.webContents.send('whatsapp:ready');
+    });
+
+    waClient.on('disconnected', (reason) => {
+        waReady = false;
+        waLogger.logWarn('cliente-desconectado', { reason });
+        mainWin?.webContents.send('whatsapp:disconnected', reason);
+    });
+
+    waClient.on('auth_failure', (msg) => {
+        waReady = false;
+        waLogger.logError('auth-failure', { msg });
+        mainWin?.webContents.send('whatsapp:auth_failure');
+    });
+
+    waClient.initialize().catch(e => waLogger.logError('init-error', { error: e.message }));
+}
+
+// ── Envío con reintentos ───────────────────────────────────────
+async function enviarMensaje(numero, mensaje, tipo = 'manual') {
+    const vNum = validarNumero(numero);
+    if (!vNum.ok) throw new Error(`Número inválido: ${vNum.error}`);
+
+    const vMsg = validarMensaje(mensaje);
+    if (!vMsg.ok) throw new Error(`Mensaje inválido: ${vMsg.error}`);
+
+    if (!waClient || !waReady) throw new Error('WhatsApp no está conectado.');
+
+    const chatId    = `${vNum.numero}@c.us`;
+    const messageId = `${tipo}-${Date.now()}`;
+
+    try {
+        await waClient.sendMessage(chatId, mensaje);
+        waLogger.logOk('mensaje-enviado', {
+            messageId,
+            tipo,
+            numero: vNum.numero.replace(/\d(?=\d{4})/g, '*')
+        });
+        mainWin?.webContents.send('whatsapp:alerta-enviada', { tipo, ok: true });
+    } catch(e) {
+        waLogger.logError('envio-fallido', { messageId, tipo, error: e.message });
+        mainWin?.webContents.send('whatsapp:alerta-enviada', { tipo, ok: false, error: e.message });
+
+        waLogger.encolarReintento(
+            messageId,
+            { numero: vNum.numero, mensaje, tipo },
+            (num, msg) => waClient.sendMessage(`${num}@c.us`, msg)
+        );
+        throw e;
+    }
+}
+
+// ── Formatear ──────────────────────────────────────────────────
+function formatearResumen(resumen, config) {
+    const hoy = new Date().toLocaleDateString('es-CL');
+    let msg   = `⚖️ *LEXIUM – Reporte Diario*\n📅 ${hoy}\n`;
+    if (config.nombreAbogado) msg += `👤 ${config.nombreAbogado}\n`;
+    msg += `${'─'.repeat(28)}\n\n`;
+
+    const { alertas, honorarios, stats } = resumen;
+
+    if (alertas.criticas.length > 0) {
+        msg += `🚨 *PLAZOS CRÍTICOS (${alertas.criticas.length})*\n`;
+        alertas.criticas.forEach(a => {
+            msg += `• *${a._caratula}*\n  ${a.mensaje}`;
+            if (a._fechaVencFormatted) msg += ` – Vence: ${a._fechaVencFormatted}`;
+            msg += '\n';
+        });
+        msg += '\n';
+    }
+
+    if (alertas.altas.length > 0) {
+        msg += `⚠️ *ALERTAS IMPORTANTES (${alertas.altas.length})*\n`;
+        alertas.altas.forEach(a => msg += `• ${a._caratula}: ${a.mensaje}\n`);
+        msg += '\n';
+    }
+
+    if (alertas.inactivas.length > 0) {
+        msg += `😴 *SIN MOVIMIENTO (${alertas.inactivas.length})*\n`;
+        alertas.inactivas.forEach(a => msg += `• ${a._caratula}\n`);
+        msg += '\n';
+    }
+
+    if (honorarios.causas.length > 0) {
+        msg += `💰 *HONORARIOS PENDIENTES*\n`;
+        msg += `• ${honorarios.causas.length} causa(s) · Total: $${honorarios.total.toLocaleString('es-CL')}\n\n`;
+    }
+
+    if (!alertas.criticas.length && !alertas.altas.length && !alertas.inactivas.length && !honorarios.causas.length) {
+        msg += `✅ *Sin alertas activas hoy*\n\n`;
+    }
+
+    msg += `${'─'.repeat(28)}\n`;
+    msg += `📊 ${stats.causasActivas} activa(s) · ${stats.totalAlertas} alerta(s)\n`;
+    msg += `_Enviado por LEXIUM_`;
+    return msg;
+}
+
+// ── Schedulers ─────────────────────────────────────────────────
+function iniciarSchedulers(config) {
+    cron.schedule('0 8 * * *', async () => {
+        waLogger.logInfo('scheduler-resumen-diario', {});
+        await _ejecutarResumen(config);
+    }, { timezone: config.timezone || 'America/Santiago' });
+
+    cron.schedule('0 * * * *', async () => {
+        await _ejecutarCriticos(config);
+    }, { timezone: config.timezone || 'America/Santiago' });
+
+    waLogger.logInfo('schedulers-iniciados', { timezone: config.timezone });
+}
+
+async function _ejecutarResumen(config) {
+    if (!waReady || !config.numeroDestino) return;
+    try {
+        const resumen = alertService.getResumenParaWhatsApp(); // una lectura
+        const mensaje = formatearResumen(resumen, config);
+        await enviarMensaje(config.numeroDestino, mensaje, 'resumen-diario');
+    } catch(e) {
+        waLogger.logError('resumen-diario-error', { error: e.message });
+    }
+}
+
+/**
+ * ✅ Una sola lectura de DB (#4 corregido):
+ * Antes llamaba a getAlertasCriticas() + getResumenParaWhatsApp() → 2 lecturas.
+ * Ahora solo llama a getResumenParaWhatsApp() y extrae críticas desde ahí.
+ */
+async function _ejecutarCriticos(config) {
+    if (!waReady || !config.numeroDestino) return;
+    try {
+        // UNA sola lectura que ya incluye críticas enriquecidas
+        const resumen  = alertService.getResumenParaWhatsApp();
+        if (!resumen.ok) return;
+
+        const criticas = resumen.alertas.criticas.filter(
+            a => !alertService.alertaYaNotificadaHoy(a)
+        );
+        if (criticas.length === 0) return;
+
+        let msg = `🚨 *LEXIUM – ALERTA CRÍTICA*\n\n`;
+        criticas.forEach(a => {
+            msg += `⚠️ *${a._caratula}*\n${a.mensaje}`;
+            if (a._fechaVencFormatted) msg += ` – Vence: ${a._fechaVencFormatted}`;
+            msg += '\n\n';
+        });
+        msg += `_Requiere acción inmediata – LEXIUM_`;
+
+        await enviarMensaje(config.numeroDestino, msg, 'alerta-critica');
+        criticas.forEach(a => alertService.marcarAlertaNotificada(a.id));
+    } catch(e) {
+        waLogger.logError('criticos-error', { error: e.message });
+    }
+}
+
+// ── IPC Handlers ───────────────────────────────────────────────
+function registrarHandlers(getConfig) {
+    ipcMain.handle('whatsapp:estado', () => ({ conectado: waReady }));
+
+    ipcMain.handle('whatsapp:enviar-resumen', async () => {
+        const config = getConfig();
+        if (!config.numeroDestino) return { error: 'Número no configurado' };
+        try { await _ejecutarResumen(config); return { ok: true }; }
+        catch(e) { return { error: e.message }; }
+    });
+
+    ipcMain.handle('whatsapp:enviar-alerta', async (_e, mensaje) => {
+        const config = getConfig();
+        if (!config.numeroDestino) return { error: 'Número no configurado' };
+        const v = validarMensaje(mensaje);
+        if (!v.ok) return { error: v.error };
+        try { await enviarMensaje(config.numeroDestino, mensaje, 'manual'); return { ok: true }; }
+        catch(e) { return { error: e.message }; }
+    });
+
+    ipcMain.handle('whatsapp:desconectar', async () => {
+        try {
+            if (waClient) await waClient.destroy();
+            waReady = false;
+            waLogger.logInfo('desconectado-manual', {});
+            return { ok: true };
+        } catch(e) { return { error: e.message }; }
+    });
+
+    ipcMain.handle('whatsapp:logs',        (_e, n)  => waLogger.getLogs(n || 50));
+    ipcMain.handle('whatsapp:estadisticas', ()       => waLogger.getEstadisticas());
+    ipcMain.handle('whatsapp:limpiar-logs', ()       => { waLogger.limpiarLogs(); return { ok: true }; });
+    ipcMain.handle('whatsapp:cache-info',   ()       => alertService.getCacheInfo());
+    ipcMain.handle('whatsapp:cola-info',    ()       => waLogger.getInfoCola());
+}
+
+module.exports = {
+    initWhatsApp,
+    iniciarSchedulers,
+    registrarHandlers,
+    enviarMensaje,
+    validarNumero,
+    verificarSeguridadElectron
+};
