@@ -231,11 +231,9 @@
                     <div class="topbar-avatar" id="topbar-avatar">A</div>
                     <div class="topbar-info">
                         <div class="topbar-name" id="topbar-name">Administrador</div>
-                        <div class="topbar-email" id="topbar-email"><a
-                                href="/cdn-cgi/l/email-protection#e283868f8b8ca2839292808d8583868dcc818d8f"><span
-                                    class="__cf_email__"
-                                    data-cfemail="eb8a8f868285ab8a9b9b89848c8a8f84c5888486">[email&#160;protected]</span></a>
-                        </div>
+                        <div class="topbar-email" id="topbar-email">admin@appbogado.com</div>
+                        <div class="topbar-phone" id="topbar-phone"
+                            style="font-size:11px;color:var(--text-3);display:none;"></div>
                     </div>
                 </div>
             </div>
@@ -446,29 +444,62 @@
         <!-- CLIENTES -->
         <section id="clientes" class="tabs">
             <div class="hub-nav">
-                <button class="hub-tab active" onclick="tab('clientes', this)"><i class="fas fa-users"></i>
-                    Clientes</button>
-                <button class="hub-tab" onclick="tab('honorarios-reales', this)"><i class="fas fa-wallet"></i>
-                    Control Financiero</button>
+                <button class="hub-tab active" id="hub-tab-clientes"
+                    onclick="mostrarPanelClientes('clientes-panel', this)">
+                    <i class="fas fa-users"></i> Clientes</button>
+                <button class="hub-tab" id="hub-tab-financiero"
+                    onclick="mostrarPanelClientes('financiero-panel', this)">
+                    <i class="fas fa-wallet"></i> Control Financiero</button>
             </div>
-            <div class="grid">
-                <div class="card">
-                    <h3><i class="fas fa-user-plus"></i> Nuevo Prospecto / Cliente</h3>
-                    <label>Nombre Completo</label>
-                    <input id="cl-nom" placeholder="Ej: Juan Pérez González" oninput="uiVerificarConflicto()">
-                    <label>RUT</label>
-                    <input id="cl-rut" placeholder="Ej: 12.345.678-9"
-                        oninput="onRutInput(this); uiVerificarConflicto()">
-                    <div id="conflicto-resultado" style="margin-top:6px;"></div>
-                    <label>Relato de Hechos</label>
-                    <textarea id="cl-rel"
-                        placeholder="Descripción de los hechos para análisis de estrategia..."></textarea>
-                    <button class="btn btn-s btn-full" onclick="addClient()"><i class="fas fa-save"></i> Guardar
-                        Prospecto</button>
+
+            <!-- Panel: Clientes -->
+            <div id="clientes-panel" class="hub-panel">
+                <div class="grid">
+                    <div class="card">
+                        <h3><i class="fas fa-user-plus"></i> Nuevo Prospecto / Cliente</h3>
+                        <label>Nombre Completo</label>
+                        <input id="cl-nom" placeholder="Ej: Juan Pérez González" oninput="uiVerificarConflicto()">
+                        <label>RUT</label>
+                        <input id="cl-rut" placeholder="Ej: 12.345.678-9"
+                            oninput="onRutInput(this); uiVerificarConflicto()">
+                        <div id="conflicto-resultado" style="margin-top:6px;"></div>
+                        <label>Relato de Hechos</label>
+                        <textarea id="cl-rel"
+                            placeholder="Descripción de los hechos para análisis de estrategia..."></textarea>
+                        <button class="btn btn-s btn-full" onclick="addClient()">
+                            <i class="fas fa-save"></i> Guardar Prospecto</button>
+                    </div>
+                    <div id="client-list">
+                        <div class="empty-state"><i class="fas fa-users"></i>
+                            <p>Sin clientes registrados</p>
+                        </div>
+                    </div>
                 </div>
-                <div id="client-list">
-                    <div class="empty-state"><i class="fas fa-users"></i>
-                        <p>Sin clientes registrados</p>
+            </div>
+
+            <!-- Panel: Control Financiero (antes sección independiente) -->
+            <div id="financiero-panel" class="hub-panel" style="display:none;">
+                <div class="grid">
+                    <div class="card">
+                        <h3><i class="fas fa-file-invoice-dollar"></i> Asignar Honorarios a Causa</h3>
+                        <label>Causa</label>
+                        <select id="hr-causa-sel"></select>
+                        <label>Monto Base ($)</label>
+                        <input type="number" id="hr-monto" placeholder="Ej: 5000000">
+                        <button class="btn btn-s btn-full" onclick="uiAsignarHonorarios()">
+                            <i class="fas fa-save"></i> Asignar</button>
+                        <hr style="margin:18px 0; border:none; border-top:1px solid var(--border);">
+                        <h3><i class="fas fa-money-bill-wave"></i> Registrar Pago</h3>
+                        <label>Causa</label>
+                        <select id="hr-pago-causa-sel"></select>
+                        <label>Monto del Pago ($)</label>
+                        <input type="number" id="hr-pago-monto" placeholder="Ej: 1000000">
+                        <button class="btn btn-p btn-full" onclick="uiRegistrarPago()">
+                            <i class="fas fa-check"></i> Registrar Pago</button>
+                    </div>
+                    <div class="card">
+                        <h3><i class="fas fa-chart-bar"></i> Estado de Honorarios por Causa</h3>
+                        <div id="hr-resumen"></div>
                     </div>
                 </div>
             </div>
@@ -1029,32 +1060,6 @@
             </div>
         </section>
 
-        <!-- HONORARIOS REALES -->
-        <section id="honorarios-reales" class="tabs">
-            <div class="grid">
-                <div class="card">
-                    <h3><i class="fas fa-file-invoice-dollar"></i> Asignar Honorarios a Causa</h3>
-                    <label>Causa</label>
-                    <select id="hr-causa-sel"></select>
-                    <label>Monto Base ($)</label>
-                    <input type="number" id="hr-monto" placeholder="Ej: 5000000">
-                    <button class="btn btn-s btn-full" onclick="uiAsignarHonorarios()"><i class="fas fa-save"></i>
-                        Asignar</button>
-                    <hr style="margin:18px 0; border:none; border-top:1px solid var(--border);">
-                    <h3><i class="fas fa-money-bill-wave"></i> Registrar Pago</h3>
-                    <label>Causa</label>
-                    <select id="hr-pago-causa-sel"></select>
-                    <label>Monto del Pago ($)</label>
-                    <input type="number" id="hr-pago-monto" placeholder="Ej: 1000000">
-                    <button class="btn btn-p btn-full" onclick="uiRegistrarPago()"><i class="fas fa-check"></i>
-                        Registrar Pago</button>
-                </div>
-                <div class="card">
-                    <h3><i class="fas fa-chart-bar"></i> Estado de Honorarios por Causa</h3>
-                    <div id="hr-resumen"></div>
-                </div>
-            </div>
-        </section>
 
         <!-- BÚSQUEDA GLOBAL -->
         <section id="busqueda" class="tabs">
@@ -2481,6 +2486,8 @@
     <!-- v13: Google Drive F13 + RenderBus Wiring (al final — después de todos los módulos) -->
     <script src="js/18-google-drive.js"></script>
     <script src="js/19-renderbus-wiring.js"></script>
+    <script src="js/services/backup/backup-core.js"></script>
+    <script src="js/services/backup/backup-ui.js"></script>
     <script src="js/20-backup-disco.js"></script>
     <script src="js/21-doc-fisico.js"></script>
     <script src="js/guardar-global.js"></script>
@@ -2989,6 +2996,7 @@
             start();
         })();
     </script>
+    <script src="js/23b-prospectos-pdf.js"></script>
 </body>
 
 </html>
